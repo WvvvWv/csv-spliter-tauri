@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景圆角矩形 -->
+  <rect width="256" height="256" rx="48" fill="#2563eb"/>
+  
+  <!-- CSV文件图标 -->
+  <g transform="translate(48, 48)">
+    <!-- 文件主体 -->
+    <rect x="0" y="0" width="160" height="160" rx="16" fill="white" opacity="0.9"/>
+    
+    <!-- 文件折叠角 -->
+    <path d="M144 0 L160 0 L160 16 L144 16 Z" fill="#e5e7eb"/>
+    
+    <!-- CSV文本内容 -->
+    <g fill="#374151" font-family="Arial, sans-serif" font-size="12">
+      <!-- 表头 -->
+      <rect x="12" y="30" width="136" height="20" fill="#f3f4f6" rx="4"/>
+      <text x="20" y="44" font-weight="bold">Name,Age,City</text>
+      
+      <!-- 数据行 -->
+      <text x="20" y="70">Alice,25,NYC</text>
+      <text x="20" y="90">Bob,30,LA</text>
+      <text x="20" y="110">Charlie,35,CHI</text>
+      
+      <!-- 分割线 -->
+      <line x1="80" y1="120" x2="80" y2="140" stroke="#9ca3af" stroke-width="2"/>
+      <text x="90" y="135" font-size="14" font-weight="bold" fill="#2563eb">SPLIT</text>
+    </g>
+  </g>
+  
+  <!-- 分割箭头 -->
+  <g transform="translate(128, 200)" fill="white">
+    <path d="M-20 0 L0 -16 L20 0 L16 0 L16 16 L-16 16 L-16 0 Z"/>
+  </g>
+  
+  <!-- 装饰线条 -->
+  <g stroke="white" stroke-width="2" opacity="0.3">
+    <line x1="16" y1="16" x2="48" y2="16"/>
+    <line x1="16" y1="24" x2="40" y2="24"/>
+    <line x1="208" y1="16" x2="240" y2="16"/>
+    <line x1="216" y1="24" x2="240" y2="24"/>
+    <line x1="16" y1="232" x2="48" y2="232"/>
+    <line x1="16" y1="240" x2="40" y2="240"/>
+    <line x1="208" y1="232" x2="240" y2="232"/>
+    <line x1="216" y1="240" x2="240" y2="240"/>
+  </g>
+</svg>

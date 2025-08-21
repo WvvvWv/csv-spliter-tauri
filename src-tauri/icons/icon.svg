@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#2196F3"/>
+  <rect x="64" y="96" width="384" height="64" rx="12" fill="white"/>
+  <rect x="64" y="176" width="384" height="64" rx="12" fill="white"/>
+  <rect x="64" y="256" width="384" height="64" rx="12" fill="white"/>
+  <rect x="64" y="336" width="384" height="64" rx="12" fill="white"/>
+  <line x1="160" y1="96" x2="160" y2="400" stroke="#2196F3" stroke-width="6"/>
+  <line x1="256" y1="96" x2="256" y2="400" stroke="#2196F3" stroke-width="6"/>
+  <line x1="352" y1="96" x2="352" y2="400" stroke="#2196F3" stroke-width="6"/>
+  <g transform="translate(256, 450)">
+    <text text-anchor="middle" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="white">CSV Splitter</text>
+  </g>
+</svg>
