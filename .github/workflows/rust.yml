@@ -10,13 +10,84 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test:
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, windows-latest, macos-latest]
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform }}
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo tauri build --verbose
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies (ubuntu only)
+      if: matrix.platform == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+    - name: Rust setup
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Rust cache
+      uses: swatinem/rust-cache@v2
+      with:
+        workspaces: './src-tauri -> target'
+
+    - name: Install Tauri CLI
+      run: cargo install tauri-cli
+
     - name: Run tests
-      run: cargo tauri test --verbose
+      working-directory: ./src-tauri
+      run: cargo test --verbose
+
+    - name: Check formatting
+      working-directory: ./src-tauri
+      run: cargo fmt --all -- --check
+
+    - name: Run clippy
+      working-directory: ./src-tauri
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+  build:
+    needs: test
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies (ubuntu only)
+      if: matrix.platform == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+    - name: Rust setup
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Rust cache
+      uses: swatinem/rust-cache@v2
+      with:
+        workspaces: './src-tauri -> target'
+
+    - name: Sync node version and setup cache
+      uses: actions/setup-node@v4
+      with:
+        node-version: 'lts/*'
+        cache: 'npm'
+
+    - name: Install frontend dependencies
+      run: npm install
+
+    - name: Install Tauri CLI
+      run: cargo install tauri-cli
+
+    - name: Build application
+      working-directory: ./src-tauri
+      run: cargo tauri build --verbose

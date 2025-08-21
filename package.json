@@ -1,0 +1,14 @@
+{
+  "name": "csv-splitter-tauri",
+  "version": "0.1.0",
+  "description": "A Tauri App for CSV file splitting",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
