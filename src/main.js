@@ -14,6 +14,7 @@ const selectFileBtn = document.getElementById('select-file-btn');
 const selectDirBtn = document.getElementById('select-dir-btn');
 const splitBtn = document.getElementById('split-btn');
 const hasHeaderCheckbox = document.getElementById('has-header');
+const convertExcelCheckbox = document.getElementById('convert-excel');
 const rowsPerFileInput = document.getElementById('rows-per-file');
 const progressContainer = document.getElementById('progress-container');
 const progressBar = document.getElementById('progress-bar');
@@ -141,12 +142,14 @@ async function startCsvSplit() {
     updateProgress(0, '开始分割...');
     
     // 调用Rust命令进行分割
+    const convertToExcel = convertExcelCheckbox.checked;
     const result = await invoke('split_csv', {
       params: {
         input_path: csvFilePath,
         output_dir: outputDir,
         rows_per_file: rowsPerFile,
-        has_header: hasHeader
+        has_header: hasHeader,
+        convert_to_excel: convertToExcel
       }
     });
     
