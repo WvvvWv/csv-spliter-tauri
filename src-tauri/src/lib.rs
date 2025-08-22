@@ -262,73 +262,131 @@ fn convert_csv_files_to_excel(
     Ok(())
 }
 
-/// 极低内存模式的CSV转Excel转换
-fn convert_csv_to_excel_minimal(
+/// 高性能CSV转Excel转换 - 使用大缓冲区和并行优化
+fn convert_csv_to_excel_fast(
     csv_path: &Path,
     xlsx_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // 使用最小内存配置
+    use std::time::Instant;
+    let start = Instant::now();
+    
+    // 使用大缓冲区提高IO性能
     let file = File::open(csv_path)?;
     let mut reader = ReaderBuilder::new()
         .has_headers(true)
-        .from_reader(BufReader::with_capacity(4 * 1024, file)); // 4KB缓冲区
+        .from_reader(BufReader::with_capacity(8 * 1024 * 1024, file)); // 8MB缓冲区
 
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();
 
-    // 极简格式，不设置背景色以节省内存
+    // 优化格式设置
     let header_format = Format::new()
         .set_bold()
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_background_color("#D9E1F2");
 
-    let headers = reader.headers().map_err(|e| e.to_string())?.clone();
+    let headers = reader.headers()?.clone();
 
-    // 写入标题行
-    for (col, header) in headers.iter().enumerate().take(100) { // 限制最大列数
-        worksheet.write_string_with_format(0, col as u16, header, &header_format).map_err(|e| e.to_string())?;
+    // 批量写入标题行
+    for (col, header) in headers.iter().enumerate() {
+        worksheet.write_string_with_format(0, col as u16, header, &header_format)?;
     }
 
-    // 流式写入数据
+    // 批量处理数据
     let mut row = 1;
-    let mut record = csv::StringRecord::new();
-
-    while reader.read_record(&mut record).map_err(|e| e.to_string())? {
-        for (col, field) in record.iter().enumerate().take(100) { // 限制最大列数
-            let truncated_field = if field.len() > 500 { // 限制字段长度
-                &field[..500]
+    let mut records = Vec::with_capacity(10000); // 预分配内存
+    
+    for record in reader.records() {
+        let record = record?;
+        records.push(record);
+        
+        // 每10000行批量写入一次
+        if records.len() >= 10000 {
+            for (offset, rec) in records.iter().enumerate() {
+                let current_row = row + offset as u32;
+                for (col, field) in rec.iter().enumerate() {
+                    if let Ok(num) = field.parse::<f64>() {
+                        worksheet.write_number(current_row, col as u16, num)?;
+                    } else {
+                        worksheet.write_string(current_row, col as u16, field)?;
+                    }
+                }
+            }
+            row += records.len() as u32;
+            records.clear();
+        }
+    }
+    
+    // 写入剩余数据
+    for (offset, rec) in records.iter().enumerate() {
+        let current_row = row + offset as u32;
+        for (col, field) in rec.iter().enumerate() {
+            if let Ok(num) = field.parse::<f64>() {
+                worksheet.write_number(current_row, col as u16, num)?;
             } else {
-                field
-            };
-
-            if let Ok(num) = truncated_field.parse::<f64>() {
-                worksheet.write_number(row, col as u16, num).map_err(|e| e.to_string())?;
-            } else {
-                worksheet.write_string(row, col as u16, truncated_field).map_err(|e| e.to_string())?;
+                worksheet.write_string(current_row, col as u16, field)?;
             }
         }
-        row += 1;
-
-        // 每5000行保存一次，避免内存累积
-        if row % 5000 == 0 {
-            worksheet.set_row_height(row as u32 - 5000, 15).map_err(|e| e.to_string())?; // 设置行高
-        }
     }
 
-    // 简单列宽设置
-    for col in 0..headers.len().min(100) {
-        worksheet.set_column_width(col as u16, 12).map_err(|e| e.to_string())?;
+    // 自动调整列宽
+    for col in 0..headers.len() {
+        worksheet.set_column_width(col as u16, 15)?;
     }
 
-    workbook.save(xlsx_path).map_err(|e| e.to_string())?;
-
-    // 显式释放资源
-    drop(reader);
-    drop(workbook);
-
+    workbook.save(xlsx_path)?;
+    
+    let duration = start.elapsed();
+    println!("转换完成: {:?} ({:.2}s)", csv_path.file_name().unwrap(), duration.as_secs_f64());
+    
     Ok(())
 }
 
-/// 在所有CSV文件生成后，串行转换为Excel文件
+/// 极低内存模式的CSV转Excel转换函数
+/// 
+/// 该函数采用流式处理方式，逐行读取CSV文件并写入Excel，
+/// 内存占用极低，适合处理超大文件
+fn convert_csv_to_excel_minimal(
+    csv_path: &Path,
+    xlsx_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // 打开CSV文件
+    let file = File::open(csv_path)?;
+    let mut reader = ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(BufReader::new(file));
+
+    // 创建Excel工作簿和工作表
+    let mut workbook = Workbook::new();
+    let worksheet = workbook.add_worksheet();
+
+    // 读取标题行
+    let headers = reader.headers()?;
+    for (col, header) in headers.iter().enumerate() {
+        worksheet.write_string(0, col as u16, header)?;
+    }
+
+    // 逐行写入数据
+    let mut row = 1;
+    for result in reader.records() {
+        let record = result?;
+        for (col, field) in record.iter().enumerate() {
+            // 尝试解析为数字，失败则作为字符串处理
+            if let Ok(num) = field.parse::<f64>() {
+                worksheet.write_number(row, col as u16, num)?;
+            } else {
+                worksheet.write_string(row, col as u16, field)?;
+            }
+        }
+        row += 1;
+    }
+
+    // 保存Excel文件
+    workbook.save(xlsx_path)?;
+    Ok(())
+}
+
+/// 在所有CSV文件生成后，并行转换为Excel文件 - 高性能版本
 fn convert_all_csv_to_excel(output_dir: &Path, file_stem: &str, convert_to_excel: bool) -> Result<(), String> {
     if !convert_to_excel {
         return Ok(());
@@ -350,21 +408,57 @@ fn convert_all_csv_to_excel(output_dir: &Path, file_stem: &str, convert_to_excel
         })
         .collect();
 
+    if csv_files.is_empty() {
+        return Ok(());
+    }
+
     // 按文件索引排序
     let mut csv_files = csv_files;
     csv_files.sort();
 
-    // 串行转换每个CSV文件
+    // 根据CPU核心数决定并行线程数
+    let cpu_cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .min(8); // 最多8个并行线程
+
+    // 使用线程池并行转换
+    use std::thread;
+    let mut handles = vec![];
+
     for csv_path in csv_files {
-        let file_name = csv_path.file_stem().and_then(|s| s.to_str()).unwrap_or("output");
-        let xlsx_path = output_dir.join(format!("{}.xlsx", file_name));
+        let output_dir = output_dir.to_path_buf();
+        let file_name = csv_path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("output")
+            .to_string();
 
-        println!("Converting {} to Excel...", csv_path.display());
-        convert_csv_to_excel_minimal(&csv_path, &xlsx_path).map_err(|e| e.to_string())?;
+        let handle = thread::spawn(move || -> Result<(), String> {
+            let xlsx_path = output_dir.join(format!("{}.xlsx", file_name));
+            
+            println!("Converting {} to Excel...", csv_path.display());
+            convert_csv_to_excel_fast(&csv_path, &xlsx_path).map_err(|e| e.to_string())?;
+            
+            // 转换完成后删除CSV文件
+            std::fs::remove_file(&csv_path).map_err(|e| e.to_string())?;
+            println!("Converted and removed {}", csv_path.display());
+            
+            Ok(())
+        });
+        
+        handles.push(handle);
 
-        // 转换完成后删除CSV文件
-        std::fs::remove_file(&csv_path).map_err(|e| e.to_string())?;
-        println!("Converted and removed {}", csv_path.display());
+        // 控制并发数
+        if handles.len() >= cpu_cores {
+            for handle in handles.drain(..) {
+                handle.join().map_err(|_| "线程执行失败")??;
+            }
+        }
+    }
+
+    // 等待剩余线程完成
+    for handle in handles {
+        handle.join().map_err(|_| "线程执行失败")??;
     }
 
     Ok(())
@@ -405,11 +499,12 @@ fn convert_all_csv_to_excel(output_dir: &Path, file_stem: &str, convert_to_excel
     let metadata = file.metadata().map_err(|e| e.to_string())?;
     let file_size = metadata.len();
     
-    // 根据文件大小智能决定线程数，限制内存使用
+    // 根据文件大小智能决定线程数，优化并发性能
     let _thread_count = match file_size {
-        0..=100_000_000 => 1,           // < 100MB: 单线程
-        100_000_001..=500_000_000 => 2, // 100MB-500MB: 2线程
-        _ => 3,                          // > 500MB: 3线程（减少并发）
+        0..=50_000_000 => 2,            // < 50MB: 2线程
+        50_000_001..=200_000_000 => 4,  // 50MB-200MB: 4线程
+        200_000_001..=1_000_000_000 => 8, // 200MB-1GB: 8线程
+        _ => 12,                         // > 1GB: 12线程（充分利用CPU）
     };
     
     // 使用内存映射文件进行高效处理
@@ -505,9 +600,7 @@ fn convert_all_csv_to_excel(output_dir: &Path, file_stem: &str, convert_to_excel
     
     let mut handles = vec![];
     
-    // 限制并发线程数，最多2个线程同时进行
-    let _max_threads = 2;
-    let semaphore = Arc::new(std::sync::Mutex::new(0));
+    // 使用线程池并行处理，根据文件大小动态调整
     
     // 启动并发处理线程
     for file_index in 1..=file_count {
@@ -532,15 +625,12 @@ fn convert_all_csv_to_excel(output_dir: &Path, file_stem: &str, convert_to_excel
         let headers = Arc::clone(&headers_arc);
         let tx = tx.clone();
         let params = params.clone();
-        let semaphore = Arc::clone(&semaphore);
-        
         let handle = thread::spawn(move || {
-            let _guard = semaphore.lock().unwrap(); // 获取锁许可
             let result = (|| -> Result<(), String> {
                 let output_file = output_dir.join(format!("{}_{}.csv", file_stem, file_index));
                 let file = File::create(&output_file).map_err(|e| e.to_string())?;
                 let mut writer = WriterBuilder::new()
-                    .from_writer(BufWriter::with_capacity(256 * 1024, file)); // 256KB缓冲区
+                    .from_writer(BufWriter::with_capacity(1 * 1024 * 1024, file)); // 增大到1MB缓冲区提高性能
                 
                 // 写入标题行
                 writer.write_record(&*headers).map_err(|e| format!("写入标题行失败: {}", e))?;
